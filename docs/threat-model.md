@@ -1,145 +1,129 @@
 # Threat Model
 
-## Goals
+## Security Goals
 
-- Only configured owner wallets can issue commands.
-- Commands cannot be replayed.
-- Commands expire.
-- The agent never needs the creator wallet private key.
-- Operational agent funds should be held by the EigenCompute app wallet, not by the creator wallet.
+- Only configured owner wallets can issue commands
+- Commands cannot be replayed
+- Commands expire after a short window
+- The agent never needs the creator wallet private key
+- Operational funds are held by the TEE app wallet, not the creator wallet
 
-## Non-Goals
+## Non-Goals (Prototype Scope)
 
-- This prototype does not prove Hermes itself is safe to run with broad tools.
-- This prototype does not implement spending policies yet.
-- This prototype does not retrieve live TEE attestation quotes yet.
-- This prototype does not make EigenCompute fully trustless; it inherits EigenCompute alpha limitations.
-
-## Main Controls
-
-- EIP-712 typed data avoids ambiguous signatures.
-- `agentId` prevents cross-agent command reuse.
-- `scope` allows coarse policy gates.
-- `nonce` prevents replay.
-- `deadline` limits signature lifetime.
-- command hashes are stored instead of full command text in the audit record.
-
-## Risks To Close Before Mainnet Funds
-
-- Add chain/protocol/spend policy enforcement before enabling wallet writes.
-- Add human confirmation flow for high-risk scopes.
-- Run Hermes with limited tool permissions and restricted network access.
-- Keep logs private by default.
-- Wire `/attestation` to EigenCompute verification data.
+- Does not prove Hermes itself is safe to run with broad tools
+- Does not implement spending policies
+- Does not retrieve live TEE attestation quotes
+- Does not make EigenCompute fully trustless (inherits alpha limitations)
 
 ## Actors
 
-- Owner: wallet authorized to control the agent.
-- Operator: party that deploys or operates the container.
-- Agent: Hermes runtime plus command runner.
-- EigenCompute environment: TEE-backed runtime and KMS.
-- External service: model provider, RPC provider, API, exchange, or x402 service.
-- Attacker: any party trying to forge commands, replay commands, steal keys, exfiltrate data, or push unsafe actions through the agent.
+| Actor | Description |
+|---|---|
+| **Owner** | Wallet authorized to control the agent |
+| **Operator** | Party that deploys and operates the container |
+| **Agent** | Hermes runtime + command runner |
+| **EigenCompute** | TEE-backed runtime and KMS |
+| **External service** | Model provider, RPC, API, exchange, or x402 service |
+| **Attacker** | Any party attempting to forge/replay commands, steal keys, exfiltrate data, or push unsafe actions |
 
 ## Assets
 
-- owner wallet signing authority
-- agent wallet private key or mnemonic
-- model/API credentials
-- signed command stream
-- persistent Hermes state
-- command audit history
-- deployment image digest
-- user data passed into commands
+| Asset | Sensitivity |
+|---|---|
+| Owner wallet signing authority | Critical |
+| Agent wallet private key / mnemonic | Critical |
+| Model / API credentials | High |
+| Signed command stream | High |
+| Persistent Hermes state | Medium |
+| Command audit history | Medium |
+| Deployment image digest | Medium |
+| User data in commands | High |
 
-## Primary Threats
+## Threat Analysis
 
-### Forged Commands
+### 1. Forged Commands
 
 An attacker submits a command without owner authorization.
 
-Current controls:
-
+**Controls:**
 - EIP-712 signature verification
-- owner allowlist
-- typed message fields
+- Owner address allowlist
+- Typed message fields prevent signature confusion
 
-Residual risk:
+**Residual risk:**
+- Compromised owner wallet can still authorize commands
+- Malicious UI could trick owner into signing a valid but dangerous command (blind signing)
 
-- compromised owner wallet can still authorize commands
-- malicious UI could trick owner into signing a valid but dangerous command
+---
 
-### Replay
+### 2. Replay Attacks
 
-An attacker resubmits an old valid command.
+An attacker resubmits a previously valid command.
 
-Current controls:
+**Controls:**
+- Per-owner nonce persisted and checked before execution
+- `deadline` limits signature lifetime
 
-- nonce is persisted per owner
-- deadline limits signature lifetime
+**Residual risk:**
+- JSON file store should be replaced with stronger durable storage for high-availability deployments
 
-Residual risk:
+---
 
-- JSON store is simple and should be replaced with stronger durable storage for high availability
+### 3. Cross-Agent Signature Reuse
 
-### Cross-Agent Signature Reuse
+A command signed for one agent is submitted to a different agent's server.
 
-A command signed for one agent is submitted to another.
+**Controls:**
+- `agentId` field in signed message
+- EIP-712 domain includes `chainId` and `verifyingContract`
 
-Current controls:
+**Residual risk:**
+- Deployments must set unique `AGENT_ID` values and stable `EIP712_VERIFYING_CONTRACT` addresses
 
-- `agentId`
-- EIP-712 domain `chainId`
-- EIP-712 domain `verifyingContract`
+---
 
-Residual risk:
+### 4. Prompt Injection Into Wallet Actions
 
-- deployments should set unique agent IDs and stable verifying contract values
+The model is manipulated into spending funds or leaking secrets.
 
-### Prompt Injection Into Wallet Actions
+**Controls:**
+- No `wallet-write` scope implemented yet
+- Coarse scope allowlist gates command categories
 
-The model is convinced to spend funds or leak secrets.
+**Required before production:**
+- Policy engine outside the model's control
+- Spend simulator
+- Destination/protocol allowlist
+- High-risk human approval flow
 
-Current controls:
+---
 
-- no wallet-write scope is implemented yet
-- coarse scope allowlist
-
-Required before production:
-
-- policy engine outside the model
-- spend simulator
-- destination/protocol allowlist
-- high-risk approval flow
-
-### Runtime Secret Exposure
+### 5. Runtime Secret Exposure
 
 Secrets leak through logs, shell history, process environment, or persisted files.
 
-Current controls:
+**Controls:**
+- `.env` in `.gitignore`
+- Logs private by default in `ecloud.toml`
+- Audit records use command hashes, not plaintext
 
-- `.env` ignored
-- logs private by default in `ecloud.toml`
-- command audit records use command hashes
+**Required before production:**
+- Review all Hermes log output paths
+- Minimize environment variable exposure
+- Use EigenCompute encrypted env handling
+- Never persist creator private keys
 
-Required before production:
+---
 
-- review Hermes logs
-- minimize environment exposure
-- use EigenCompute encrypted env handling
-- never persist creator private keys
-
-### Malicious Upgrade
+### 6. Malicious Upgrade
 
 Operator deploys different code than users expect.
 
-Current controls:
+**Controls:**
+- Docker image verified through EigenCompute release metadata
+- Verifiable source deployment path documented
 
-- Docker image can be verified through EigenCompute release metadata
-- verifiable source deployment path is documented
-
-Required before production:
-
-- users verify image digest and release history
-- upgrade delays or owner-governed release acceptance
-- public source builds from pinned commits
+**Required before production:**
+- Users verify image digest and release history
+- Upgrade delays or owner-governed release acceptance
+- Public source builds from pinned commits

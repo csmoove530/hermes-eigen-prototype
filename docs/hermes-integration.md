@@ -1,46 +1,52 @@
 # Hermes Integration
 
-The prototype intentionally starts with a generic command runner. Hermes integration should be added through a wrapper script, not by pointing directly at an interactive shell without guardrails.
+The prototype starts with a generic command runner. Hermes integration is added through a wrapper script — never by pointing directly at an interactive shell.
 
-## Target Runtime Shape
+## How the Runner Works
 
 ```text
 POST /command
-  verified signed command
-      |
-      v
-runner.js
-  writes command to stdin
-      |
-      v
-scripts/run-hermes.sh
-  selects profile, home directory, model, and tool policy
-      |
-      v
-Hermes Agent
+  │
+  ├── Signature verified
+  ├── Nonce checked
+  ├── Scope validated
+  │
+  └── runner.js
+        │
+        ├── RUNNER_MODE=mock  →  Returns deterministic echo response
+        │
+        └── RUNNER_MODE=hermes  →  Spawns HERMES_COMMAND
+              │
+              ├── Writes command text to stdin
+              ├── Sets env: HERMES_AGENT_ID, HERMES_COMMAND_OWNER, HERMES_COMMAND_SCOPE
+              ├── Captures stdout/stderr
+              └── Enforces HERMES_TIMEOUT_MS
 ```
 
-## Recommended Wrapper Responsibilities
-
-The wrapper should:
-
-- set `HOME` or Hermes-specific config paths to `/mnt/disks/userdata`
-- select a dedicated Hermes profile for this agent
-- disable or restrict high-risk tools by default
-- choose a known model provider
-- route logs to files that do not expose secrets
-- enforce a non-interactive prompt flow
-- fail closed if Hermes config is missing
-
-Example environment:
+## Configuration
 
 ```bash
 RUNNER_MODE=hermes
 HERMES_COMMAND="/app/scripts/run-hermes.sh"
+HERMES_TIMEOUT_MS=120000
 DATA_DIR=/mnt/disks/userdata
 ```
 
-Example wrapper sketch:
+## Writing a Wrapper Script
+
+The wrapper script is responsible for configuring Hermes before execution.
+
+**Requirements:**
+
+- Set `HOME` or config paths to persistent storage
+- Select a dedicated Hermes profile
+- Disable or restrict high-risk tools
+- Choose a known model provider
+- Route logs to files (not stdout with secrets)
+- Use non-interactive prompt mode
+- Fail closed if config is missing
+
+**Example: `scripts/run-hermes.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -49,69 +55,81 @@ set -euo pipefail
 export HOME="${DATA_DIR:-/mnt/disks/userdata}/home"
 mkdir -p "$HOME"
 
+# Read command text from stdin
 prompt="$(cat)"
 
+# Run Hermes non-interactively with a restricted profile
 hermes --profile eigen-agent --non-interactive "$prompt"
 ```
 
-The exact Hermes CLI flags may differ by release. Verify the installed Hermes version and prefer the least-privileged mode it supports.
+The exact Hermes CLI flags may differ by release. Verify the installed version and prefer the least-privileged mode available.
 
 ## State Persistence
 
-Persist these under `/mnt/disks/userdata`:
+**Persist under `/mnt/disks/userdata`:**
 
-- Hermes config
-- Hermes sessions
-- Hermes memories
-- installed skills
-- profile data
-- local tool caches that are safe to retain
+- Hermes config and profiles
+- Session history
+- Agent memories
+- Installed skills
+- Local tool caches
 
-Do not persist:
+**Never persist:**
 
-- creator wallet private keys
-- raw command signatures longer than needed
-- plaintext provider credentials outside EigenCompute encrypted env handling
-- broad shell history
+- Creator wallet private keys
+- Raw command signatures
+- Plaintext provider credentials (use EigenCompute encrypted env)
+- Broad shell history
 
-## Tool Policy
+## Scope Policy
 
 Start with read-only scopes:
 
-- `chat`
-- `research`
-- `code`
-- `wallet-read`
+| Scope | Risk | Status |
+|---|---|---|
+| `chat` | Low | Enabled by default |
+| `research` | Low | Enabled by default |
+| `code` | Low | Enabled by default |
+| `wallet-read` | Low | Enabled by default |
+| `wallet-write` | High | Do not enable yet |
 
-Do not add wallet-write scopes until policy enforcement exists for:
+**Before enabling `wallet-write`, implement:**
 
-- max spend per command
-- max spend per day
-- allowed chains
-- allowed token contracts
-- allowed destination addresses or protocols
-- required human approval thresholds
+- Max spend per command
+- Max spend per day
+- Allowed chains
+- Allowed token contracts
+- Allowed destination addresses/protocols
+- Human approval thresholds
 
-## App Wallet Integration
+## App Wallet Model
 
-EigenCompute provides a TEE-bound mnemonic through `MNEMONIC`. The intended custody model is:
+EigenCompute provides a TEE-bound mnemonic through the `MNEMONIC` environment variable.
 
-- creator wallet signs commands
-- agent derives operational wallet from `MNEMONIC`
-- agent signs permitted onchain actions
-- policies constrain what the agent can do
+```text
+Owner Wallet                    Agent Wallet
+(human-held)                    (TEE-derived)
+     │                               │
+     │  signs EIP-712 commands       │  signs permitted onchain actions
+     │                               │
+     └──────── policies ─────────────┘
+               constrain what
+               the agent can do
+```
 
-Never inject the creator wallet private key into Hermes.
+**Never inject the creator wallet private key into Hermes.**
 
-## Failure Handling
+## Failure Classification
 
-The runner currently returns command status and output. A production runner should also classify:
+A production runner should classify failures for audit records:
 
-- Hermes unavailable
-- model provider unavailable
-- tool denied by policy
-- command rejected by Hermes safety layer
-- timeout
-- partial completion
+| Failure | Audit Status | Action |
+|---|---|---|
+| Hermes unavailable | `failed` | Check Hermes installation |
+| Model provider unavailable | `failed` | Check API credentials |
+| Tool denied by policy | `denied` | Review tool permissions |
+| Rejected by Hermes safety | `rejected` | Review command content |
+| Timeout | `timeout` | Increase `HERMES_TIMEOUT_MS` or simplify command |
+| Partial completion | `partial` | Check output for usable results |
 
-These should be reflected in audit records without leaking sensitive command content.
+Audit records should reflect status without leaking sensitive command content.

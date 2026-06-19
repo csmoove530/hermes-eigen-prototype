@@ -2,27 +2,33 @@
 
 ## Supported Versions
 
-This repository is an early prototype. Only the latest commit on `main` is considered supported.
+This repository is an early prototype. Only the latest commit on `main` is supported.
 
-## Reporting A Vulnerability
+## Reporting a Vulnerability
 
-Please report vulnerabilities privately through GitHub Security Advisories if available, or contact the repository owner directly.
+Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/csmoove530/hermes-eigen-prototype/security/advisories/new), or contact the repository owner directly.
 
-Include:
+**Include:**
 
-- affected commit
-- reproduction steps
-- expected impact
-- whether secrets, funds, or command authorization can be compromised
+- Affected commit hash
+- Reproduction steps
+- Expected impact
+- Whether secrets, funds, or command authorization can be compromised
 
-Do not include live private keys, seed phrases, provider credentials, or user data in reports.
+**Do not include** live private keys, seed phrases, provider credentials, or user data.
 
-## Known Prototype Limitations
+## Prototype Limitations
 
-- No spend policy engine yet.
-- No live EigenCompute attestation integration yet.
-- No production Hermes sandbox policy yet.
-- No wallet-write execution path yet.
-- No multi-sig approval flow yet.
+This prototype does not yet implement:
 
-Do not use this prototype with customer funds or meaningful mainnet balances without additional review and hardening.
+| Missing Control | Risk |
+|---|---|
+| Spend policy engine | No limits on wallet-write actions |
+| Live TEE attestation | Cannot cryptographically verify runtime |
+| Hermes sandbox policy | Agent tools are not restricted |
+| Wallet-write execution | No onchain transaction path |
+| Multi-sig approval | Single owner signature is sufficient |
+
+**Do not use this prototype with real funds or mainnet balances without additional hardening.**
+
+See [docs/security.md](docs/security.md) and [docs/threat-model.md](docs/threat-model.md) for the full security architecture.

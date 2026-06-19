@@ -1,24 +1,31 @@
 # EigenCompute Deployment
 
-This project is structured for EigenCompute, but it can run anywhere Docker runs.
+This project is structured for EigenCompute but runs anywhere Docker runs.
 
-EigenCompute-specific assumptions:
+## Prerequisites
 
-- container image must target `linux/amd64`
-- app should bind to `0.0.0.0`
-- runtime state should be stored under `/mnt/disks/userdata`
-- secrets should be supplied through encrypted environment handling, not image `ENV`
-- app release and Docker digest should be verified after deployment
+- Docker with `buildx` support
+- [Eigen CLI](https://docs.eigencompute.com/) (`@layr-labs/ecloud-cli`)
+- A Docker Hub (or compatible registry) account
+- An EVM wallet address to use as the command owner
 
-## 1. Configure Environment
+## EigenCompute Requirements
 
-Copy the template:
+| Requirement | Value |
+|---|---|
+| Image architecture | `linux/amd64` |
+| Bind address | `0.0.0.0` |
+| Persistent storage | `/mnt/disks/userdata` |
+| Secrets delivery | Encrypted env file (not image `ENV`) |
+| Verification | Image digest checked post-deploy |
+
+## Step 1: Configure Environment
 
 ```bash
 cp .env.example .env
 ```
 
-Set at least:
+Set at minimum:
 
 ```bash
 OWNER_ADDRESSES=0xYourOwnerAddress
@@ -27,11 +34,11 @@ RUNNER_MODE=mock
 DATA_DIR=/mnt/disks/userdata
 ```
 
-For production, keep `RUNNER_MODE=mock` until the API, verification dashboard, and command signing flow are tested.
+Keep `RUNNER_MODE=mock` until the API, verification dashboard, and command signing flow are tested end-to-end.
 
 Do not commit `.env`.
 
-## 2. Install Eigen CLI
+## Step 2: Install Eigen CLI
 
 ```bash
 npm install -g @layr-labs/ecloud-cli
@@ -39,16 +46,14 @@ ecloud auth login
 ecloud billing subscribe
 ```
 
-Use Sepolia first.
+Start with Sepolia:
 
 ```bash
 ecloud compute env set sepolia
 ecloud auth whoami
 ```
 
-## 3. Build An Image
-
-Docker must be running.
+## Step 3: Build the Image
 
 ```bash
 docker buildx build --platform linux/amd64 \
@@ -58,12 +63,12 @@ docker buildx build --platform linux/amd64 \
 
 The included Dockerfile:
 
-- uses Node 22 slim
-- runs as root because EigenCompute TEE templates commonly require root
-- exposes port 3000
-- sets `DATA_DIR=/mnt/disks/userdata`
+- Uses Node 22 slim
+- Runs as root (EigenCompute TEE templates commonly require root)
+- Exposes port 3000
+- Sets `DATA_DIR=/mnt/disks/userdata`
 
-## 4. Deploy
+## Step 4: Deploy
 
 ```bash
 ecloud compute app deploy \
@@ -74,27 +79,9 @@ ecloud compute app deploy \
   --log-visibility private
 ```
 
-Keep logs private unless you have reviewed every log path. Commands can contain sensitive user intent.
+Keep logs private. Commands can contain sensitive user intent.
 
-## 5. Verifiable Source Build
-
-Once the repository is public and stable:
-
-```bash
-ecloud compute app deploy \
-  --verifiable \
-  --repo https://github.com/<owner>/hermes-eigen-prototype \
-  --commit $(git rev-parse HEAD) \
-  --env-file .env \
-  --instance-type g1-standard-4t \
-  --log-visibility private
-```
-
-Use pinned commits. Do not deploy from a moving branch for verifiability-sensitive agents.
-
-## 6. Verify Deployment
-
-After deployment:
+## Step 5: Verify Deployment
 
 ```bash
 ecloud compute app info
@@ -103,25 +90,44 @@ ecloud compute app logs
 
 Then check the Eigen verification dashboard for:
 
-- application ID
-- creator address
+- Application ID
+- Creator address
 - Docker image digest
-- release history
+- Release history
 - TEE attestation
-- app wallet addresses
+- App wallet addresses
 
-The current `/attestation` endpoint is a placeholder. A production integration should expose a stable app verification URL and release metadata.
+## Step 6: Verifiable Source Build (Optional)
 
-## 7. Production Checklist
+For public, auditable deployments:
+
+```bash
+ecloud compute app deploy \
+  --verifiable \
+  --repo https://github.com/csmoove530/hermes-eigen-prototype \
+  --commit $(git rev-parse HEAD) \
+  --env-file .env \
+  --instance-type g1-standard-4t \
+  --log-visibility private
+```
+
+Use pinned commits. Do not deploy from a moving branch for verifiability-sensitive agents.
+
+## Production Checklist
 
 Before enabling wallet writes or real funds:
 
-- Use a dedicated owner wallet, not your primary wallet.
-- Set `EIP712_VERIFYING_CONTRACT` to a stable controller/registry address.
-- Add onchain or file-backed policy definitions for spending limits.
-- Add chain and protocol allowlists.
-- Run Hermes with a restricted tool profile.
-- Persist Hermes state under `/mnt/disks/userdata`.
-- Verify upgrades before allowing the new release to access funds.
-- Keep logs private.
-- Test nonce replay, expired command, wrong owner, wrong agent ID, and disabled scope failures.
+- [ ] Use a dedicated owner wallet, not your primary wallet
+- [ ] Set `EIP712_VERIFYING_CONTRACT` to a stable controller/registry address
+- [ ] Add spending limits (onchain or file-backed policy definitions)
+- [ ] Add chain and protocol allowlists
+- [ ] Run Hermes with a restricted tool profile
+- [ ] Persist Hermes state under `/mnt/disks/userdata`
+- [ ] Verify upgrades before allowing access to funds
+- [ ] Keep logs private
+- [ ] Test these failure cases:
+  - Nonce replay
+  - Expired command
+  - Wrong owner address
+  - Wrong agent ID
+  - Disabled scope
