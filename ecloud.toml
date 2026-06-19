@@ -1,0 +1,19 @@
+name = "hermes-eigen-prototype"
+
+[compute]
+instance_type = "g1-standard-4t"
+port = 3000
+log_visibility = "private"
+resource_usage_monitoring = "enable"
+
+[env.public]
+AGENT_ID = "hermes-eigen-dev"
+RUNNER_MODE = "mock"
+EIP712_CHAIN_ID = "11155111"
+EIP712_VERIFYING_CONTRACT = "0x0000000000000000000000000000000000000001"
+ALLOWED_SCOPES = "chat,research,code,wallet-read"
+
+# Set encrypted/private values through ecloud --env-file rather than committing them:
+# OWNER_ADDRESSES=0x...
+# HERMES_COMMAND=hermes
+# RUNNER_MODE=hermes

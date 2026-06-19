@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log*
+.git
+.github
+.env
+.data
+.data-*
+coverage
+dist
+*.pem
+*.key
+*.log

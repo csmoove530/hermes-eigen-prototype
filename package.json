@@ -1,0 +1,32 @@
+{
+  "name": "hermes-eigen-prototype",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Wallet-controlled Hermes agent control plane prototype for EigenCompute.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/csmoove530/hermes-eigen-prototype.git"
+  },
+  "bugs": {
+    "url": "https://github.com/csmoove530/hermes-eigen-prototype/issues"
+  },
+  "homepage": "https://github.com/csmoove530/hermes-eigen-prototype#readme",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "sign": "node scripts/sign-command.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "fastify": "^5.2.1",
+    "viem": "^2.23.7",
+    "zod": "^3.24.1"
+  },
+  "overrides": {
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {}
+}
